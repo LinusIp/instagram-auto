@@ -1,0 +1,10 @@
+{
+  "title": "Songs I'll be manifesting\n({n}/{total})",
+  "series_start": 1,
+  "series_total": 30,
+  "title_color": "#FFD60A",
+  "subtitles": true,
+  "subtitle_style": "clean",
+  "skip_silence": true,
+  "font": "DejaVu Sans"
+}
