@@ -19,7 +19,10 @@ After posting, the item moves to posted/. If it fails, it moves to failed/ with
 an error file next to it, so one bad file never blocks the queue.
 
 Environment variables (GitHub secrets / variables):
-  IG_USER_ID, IG_ACCESS_TOKEN   required for posting
+  IG_ACCESS_TOKEN               required for posting. Works with both token types:
+                                Instagram Login token (starts with "IG", no Facebook Page needed)
+                                or Facebook Login token (needs a linked Facebook Page)
+  IG_USER_ID                    optional, looked up from the token if missing
   ANTHROPIC_API_KEY             optional, writes captions (else notes/transcript is used)
   WHISPER_MODEL                 default "small.en"
   POSTS_PER_RUN                 default 1
@@ -40,6 +43,22 @@ import requests
 API_VERSION = "v23.0"  # bump if Meta retires this version
 GRAPH = f"https://graph.facebook.com/{API_VERSION}"
 RUPLOAD = f"https://rupload.facebook.com/ig-api-upload/{API_VERSION}"
+# Tokens from "Instagram API with Instagram Login" (no Facebook Page needed) start with "IG"
+# and use graph.instagram.com; videos are then sent as a public URL instead of uploaded.
+INSTAGRAM_LOGIN = False
+
+
+def setup_api(token: str, user_id: str | None) -> str:
+    """Pick the right API host for the token type; returns the Instagram user id."""
+    global GRAPH, INSTAGRAM_LOGIN
+    if token.startswith("IG"):
+        INSTAGRAM_LOGIN = True
+        GRAPH = f"https://graph.instagram.com/{API_VERSION}"
+    if not user_id:
+        me = api("GET", f"{GRAPH}/me", params={"fields": "user_id,username", "access_token": token})
+        user_id = str(me.get("user_id") or me["id"])
+        print(f"Posting as @{me.get('username', '?')} ({user_id})")
+    return user_id
 
 ROOT = Path(__file__).resolve().parent
 QUEUE, POSTED, FAILED = ROOT / "queue", ROOT / "posted", ROOT / "failed"
@@ -292,6 +311,15 @@ def post_reel(video: Path, caption: str, user_id: str, token: str) -> str:
     return publish(cid, user_id, token)
 
 
+def post_reel_url(url: str, caption: str, user_id: str, token: str) -> str:
+    print("  sending reel to Instagram...")
+    cid = api("POST", f"{GRAPH}/{user_id}/media", data={
+        "media_type": "REELS", "video_url": url, "caption": caption,
+        "share_to_feed": "true", "access_token": token})["id"]
+    wait_ready(cid, token)
+    return publish(cid, user_id, token)
+
+
 def post_images(urls: list[str], caption: str, user_id: str, token: str) -> str:
     print(f"  posting {len(urls)} image(s)...")
     if len(urls) == 1:
@@ -380,7 +408,16 @@ def process(item: Path, cfg: dict, series_n: int, user_id: str, token: str) -> t
         (work / "caption.txt").write_text(caption, encoding="utf-8")
         if DRY_RUN:
             return "dry-run", used_n
-        return post_reel(reel, caption, user_id, token), used_n
+        if not INSTAGRAM_LOGIN:
+            return post_reel(reel, caption, user_id, token), used_n
+        staged = STAGING / base / "reel.mp4"  # host it in the public repo so Instagram can fetch it
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(reel, staged)
+        commit_and_push(f"stage {base} for Instagram")
+        try:
+            return post_reel_url(raw_url(staged), caption, user_id, token), used_n
+        finally:
+            shutil.rmtree(STAGING / base, ignore_errors=True)
 
     # images: single file or a folder (carousel)
     srcs = [item] if item.is_file() else sorted(
@@ -413,8 +450,10 @@ def move_out(item: Path, dest_dir: Path):
 def main():
     cfg = load_config()
     user_id, token = os.getenv("IG_USER_ID"), os.getenv("IG_ACCESS_TOKEN")
-    if not DRY_RUN and not (user_id and token):
-        sys.exit("Missing IG_USER_ID / IG_ACCESS_TOKEN secrets.")
+    if not DRY_RUN:
+        if not token:
+            sys.exit("Missing IG_ACCESS_TOKEN secret.")
+        user_id = setup_api(token.strip(), user_id)
 
     items = queue_items()
     if not items:

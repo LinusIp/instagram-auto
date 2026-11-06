@@ -39,20 +39,18 @@ My own caption here #baku
 ## One-time setup (about 30 minutes)
 
 ### 1. Instagram account
-- Switch the account to **Professional → Creator or Business** (Instagram settings).
-- Link it to a **Facebook Page** (an empty one is fine).
+Switch the account to **Professional → Creator or Business** (Instagram settings). No Facebook Page needed.
 
-### 2. Get the Instagram ID and token
-1. Go to <https://developers.facebook.com> → **My Apps → Create App** → type **Business**.
-2. Add the **Instagram** product (the "API setup with Facebook login" option).
-3. Best option, a token that never expires: in **Meta Business Settings → Users → System users**,
-   add a system user (Admin), assign it your Page, Instagram account and the app, then
-   **Generate token** with these permissions:
-   `instagram_basic, instagram_content_publish, pages_show_list, pages_read_engagement, business_management`.
-   A normal long-lived user token also works but expires after 60 days.
-4. Find your Instagram account ID by opening
-   `https://graph.facebook.com/v23.0/me/accounts?fields=instagram_business_account&access_token=YOUR_TOKEN`
-   in a browser. The number under `instagram_business_account.id` is your `IG_USER_ID`.
+### 2. Get the access token (no Facebook Page needed)
+1. Go to <https://developers.facebook.com> → **My Apps → Create app**, and pick the Instagram use case
+   (**"Instagram API with Instagram Login"**).
+2. In the app go to **Instagram → API setup with Instagram login → Generate access tokens → Add account**,
+   log in to Instagram, then click **Generate token** next to your account.
+3. Copy the token (it starts with `IG`) into the GitHub secret `IG_ACCESS_TOKEN`. `IG_USER_ID` is
+   optional with this token type; the script looks it up.
+4. The token lasts 60 days. Generate a new one in the same place and update the secret before then.
+
+(The older route with a Facebook Page and a Facebook Login token also still works.)
 
 ### 3. Caption key (optional, about 1–2 cents per post)
 Create an API key at <https://console.anthropic.com>. Without it, posts use your `.txt` notes,
@@ -62,7 +60,7 @@ the title, or the transcript as the caption.
 1. New repository → **Public** (see "Good to know") → upload all these files,
    including the hidden `.github` folder.
 2. **Settings → Secrets and variables → Actions → New repository secret**:
-   `IG_USER_ID`, `IG_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`.
+   `IG_ACCESS_TOKEN` (and optionally `ANTHROPIC_API_KEY`).
 3. **Settings → Actions → General → Workflow permissions** → "Read and write permissions".
 
 ### 5. Test it
